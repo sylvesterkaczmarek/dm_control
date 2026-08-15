@@ -15,8 +15,21 @@
 
 """Suite environments viewer package."""
 
+import importlib
 
-from dm_control.viewer import application
+
+def _load_application():
+  application = globals().get('application')
+  if application is None:
+    application = importlib.import_module('dm_control.viewer.application')
+    globals()['application'] = application
+  return application
+
+
+def __getattr__(name):
+  if name == 'application':
+    return _load_application()
+  raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
 
 
 def launch(environment_loader, policy=None, title='Explorer', width=1024,
@@ -36,5 +49,6 @@ def launch(environment_loader, policy=None, title='Explorer', width=1024,
   Raises:
       ValueError: When 'environment_loader' argument is set to None.
   """
+  application = _load_application()
   app = application.Application(title=title, width=width, height=height)
   app.launch(environment_loader=environment_loader, policy=policy)
