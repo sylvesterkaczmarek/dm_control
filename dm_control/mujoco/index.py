@@ -376,9 +376,7 @@ class RegularNamedAxis(Axis):
       # when trying to index with the returned item.
       if isinstance(key_item.flat[0], str):
         key_item = np.array([self._names_to_offsets[util.to_native_string(k)]
-                             for k in key_item.flat])
-        # Ensure the output shape is the same as that of the input.
-        key_item.shape = original_shape
+                             for k in key_item.flat]).reshape(original_shape)
 
     return key_item
 
