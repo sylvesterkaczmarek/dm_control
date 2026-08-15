@@ -1,0 +1,45 @@
+name: Validate dm_control issue 537
+
+on:
+  push:
+    branches: [validate-issue-537]
+
+permissions:
+  contents: read
+
+jobs:
+  reproduce:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dm_control
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+      - name: Run issue 537 reproductions
+        run: |
+          python - <<'PY'
+          from dm_control import mjcf
+
+          xml = '''<mujoco model="repro">
+            <default>
+              <default class="forearm_muscle">
+                <muscle ctrllimited="true" ctrlrange="-1 1" />
+                <tendon width="0.002" />
+              </default>
+            </default>
+          </mujoco>'''
+          root = mjcf.from_xml_string(xml)
+          assert root is not None
+
+          root = mjcf.RootElement(model="repro")
+          nested = root.default.add("default", dclass="forearm_muscle")
+          muscle = nested.add("muscle", ctrllimited="true", ctrlrange="-1 1")
+          tendon = nested.add("tendon", width="0.002")
+          assert muscle is not None
+          assert tendon is not None
+          print("issue 537 reproduction passes on current main")
+          PY
