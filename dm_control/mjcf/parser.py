@@ -163,6 +163,48 @@ def from_zip(path, model_file='model.xml', escape_separators=False,
                 resolve_references=resolve_references, assets=assets)
 
 
+def _load_nested_include(include_tag, model_dir, assets, asset_dir=''):
+  """Loads XML for an include that appears below the root element."""
+  include_file = include_tag.attrib['file']
+  asset_path = os.path.normpath(os.path.join(asset_dir, include_file))
+  try:
+    contents = assets[asset_path]
+  except KeyError:
+    include_path = os.path.join(model_dir, include_file)
+    contents = resources.GetResource(include_path)
+    return etree.fromstring(contents), os.path.dirname(include_path), ''
+  else:
+    return (
+        etree.fromstring(contents),
+        os.path.join(model_dir, os.path.dirname(include_file)),
+        os.path.dirname(asset_path),
+    )
+
+
+def _expand_nested_includes(xml_element, model_dir, assets, asset_dir=''):
+  """Expands nested include nodes in place using MuJoCo's DOM semantics."""
+  child_index = 0
+  while child_index < len(xml_element):
+    xml_child = xml_element[child_index]
+    if xml_child.tag is etree.Comment or xml_child.tag is etree.PI:
+      child_index += 1
+      continue
+
+    if xml_child.tag == 'include':
+      included_root, include_model_dir, include_asset_dir = _load_nested_include(
+          xml_child, model_dir, assets, asset_dir)
+      _expand_nested_includes(
+          included_root, include_model_dir, assets, include_asset_dir)
+      included_children = list(included_root)
+      xml_element.remove(xml_child)
+      for offset, included_child in enumerate(included_children):
+        xml_element.insert(child_index + offset, included_child)
+      child_index += len(included_children)
+    else:
+      _expand_nested_includes(xml_child, model_dir, assets, asset_dir)
+      child_index += 1
+
+
 def _parse(xml_root, escape_separators=False,
            model_dir='', resolve_references=True, assets=None):
   """Parses a complete MJCF model from an XML.
@@ -215,6 +257,10 @@ def _parse(xml_root, escape_separators=False,
       # We must remove <include/> tags before parsing the main XML file, since
       # these are a schema violation.
       xml_root.remove(include_tag)
+
+    # Nested <include/> tags are valid MJCF. Expand them in the XML tree before
+    # handing the remaining elements to the schema-driven PyMJCF parser.
+    _expand_nested_includes(xml_root, model_dir, assets)
 
     # Parse the main XML file.
     try:
